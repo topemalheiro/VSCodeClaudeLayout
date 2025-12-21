@@ -291,11 +291,23 @@ function Invoke-LayoutSnap {
         Start-Sleep -Milliseconds 100
 
 
+
+
+        
+
         
         # Open the Claude Code panel
         Open-SecondaryPanel -hwnd $hwnd -SkipToggle
 
-        Write-Host "  Layout complete - manually adjust panel divider once (VS Code remembers it)" -ForegroundColor Yellow
+        # Reload VS Code window to apply Custom UI Style CSS
+        # (Sets auxiliary bar to 1920px width)
+        Write-Host "  Reloading window to apply CSS..." -ForegroundColor Cyan
+        [System.Windows.Forms.SendKeys]::SendWait("^+p")
+        Start-Sleep -Milliseconds 400
+        [System.Windows.Forms.SendKeys]::SendWait("Developer: Reload Window")
+        Start-Sleep -Milliseconds 300
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        Write-Host "  Window reload triggered" -ForegroundColor Green
 
         return $true
     } else {
