@@ -11,7 +11,6 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 
 public class WinAPI {
     [DllImport("user32.dll")]
@@ -64,44 +63,14 @@ public class WinAPI {
     public static extern bool SetCursorPos(int X, int Y);
 
     [DllImport("user32.dll")]
-    public static extern bool GetCursorPos(out POINT lpPoint);
+    public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
 
     [DllImport("user32.dll")]
-    public static extern int GetSystemMetrics(int nIndex);
+    public static extern bool GetCursorPos(out POINT lpPoint);
 
-    // SendInput with proper struct layout for unions
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
-    public const int SM_CXSCREEN = 0;
-    public const int SM_CYSCREEN = 1;
-    public const int SM_XVIRTUALSCREEN = 76;
-    public const int SM_YVIRTUALSCREEN = 77;
-    public const int SM_CXVIRTUALSCREEN = 78;
-    public const int SM_CYVIRTUALSCREEN = 79;
-
-    private const uint INPUT_MOUSE = 0;
-    private const uint MOUSEEVENTF_MOVE = 0x0001;
-    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
-    private const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
-    private const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct INPUT {
-        public uint type;
-        public MOUSEINPUT mi;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MOUSEINPUT {
-        public int dx;
-        public int dy;
-        public uint mouseData;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
+    // Mouse event flags
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct MSG {
@@ -120,79 +89,6 @@ public class WinAPI {
     }
 
     public const int WM_HOTKEY = 0x0312;
-
-    // Convert screen coordinates to virtual desktop normalized coordinates (0-65535)
-    private static void ToAbsolute(int x, int y, out int absX, out int absY) {
-        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-        absX = ((x - vx) * 65536) / vw;
-        absY = ((y - vy) * 65536) / vh;
-    }
-
-    public static void MouseClick(int x, int y) {
-        SetCursorPos(x, y);
-        Thread.Sleep(10);
-
-        int absX, absY;
-        ToAbsolute(x, y, out absX, out absY);
-
-        INPUT[] inputs = new INPUT[2];
-
-        inputs[0].type = INPUT_MOUSE;
-        inputs[0].mi.dx = absX;
-        inputs[0].mi.dy = absY;
-        inputs[0].mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | MOUSEEVENTF_MOVE | MOUSEEVENTF_LEFTDOWN;
-
-        inputs[1].type = INPUT_MOUSE;
-        inputs[1].mi.dx = absX;
-        inputs[1].mi.dy = absY;
-        inputs[1].mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | MOUSEEVENTF_LEFTUP;
-
-        SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
-    }
-
-    public static void MouseDrag(int fromX, int fromY, int toX, int toY) {
-        // Move to start position
-        SetCursorPos(fromX, fromY);
-        Thread.Sleep(50);
-
-        int absFromX, absFromY, absToX, absToY;
-        ToAbsolute(fromX, fromY, out absFromX, out absFromY);
-        ToAbsolute(toX, toY, out absToX, out absToY);
-
-        // Mouse down at start
-        INPUT downInput = new INPUT();
-        downInput.type = INPUT_MOUSE;
-        downInput.mi.dx = absFromX;
-        downInput.mi.dy = absFromY;
-        downInput.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | MOUSEEVENTF_MOVE | MOUSEEVENTF_LEFTDOWN;
-        SendInput(1, new INPUT[] { downInput }, Marshal.SizeOf(typeof(INPUT)));
-        Thread.Sleep(50);
-
-        // Move to end position (in steps for smoother drag)
-        int steps = 10;
-        for (int i = 1; i <= steps; i++) {
-            int curX = fromX + ((toX - fromX) * i / steps);
-            int curY = fromY + ((toY - fromY) * i / steps);
-            SetCursorPos(curX, curY);
-            Thread.Sleep(10);
-        }
-
-        // Final position
-        SetCursorPos(toX, toY);
-        Thread.Sleep(50);
-
-        // Mouse up at end
-        INPUT upInput = new INPUT();
-        upInput.type = INPUT_MOUSE;
-        upInput.mi.dx = absToX;
-        upInput.mi.dy = absToY;
-        upInput.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | MOUSEEVENTF_LEFTUP;
-        SendInput(1, new INPUT[] { upInput }, Marshal.SizeOf(typeof(INPUT)));
-    }
 }
 "@
 
@@ -256,23 +152,13 @@ function Open-SecondaryPanel {
         [switch]$SkipToggle  # Skip Ctrl+Alt+B if panel is already open
     )
 
-    # First ensure VS Code has focus
+    # Just ensure VS Code has focus - no click needed
     [WinAPI]::SetForegroundWindow($hwnd) | Out-Null
-    Start-Sleep -Milliseconds 50
-
-    # Click in the center of the VS Code window to ensure it has keyboard focus
-    $clickX = [int]($script:TargetX + ($script:TargetWidth / 2))
-    $clickY = [int]($script:TargetY + ($script:TargetHeight / 2))
-    [WinAPI]::MouseClick($clickX, $clickY)
-    Start-Sleep -Milliseconds 50
+    Start-Sleep -Milliseconds 100
 
     if (-not $SkipToggle) {
         Write-Host "  Opening Claude Code panel (Ctrl+Alt+B)..." -ForegroundColor Cyan
-        # Use SendKeys to send Ctrl+Alt+B
-        # ^ = Ctrl, % = Alt, b = B key
         [System.Windows.Forms.SendKeys]::SendWait("^%b")
-
-        # Wait for panel to open and render
         Start-Sleep -Milliseconds 300
         Write-Host "  Panel toggle sent" -ForegroundColor Green
     } else {
@@ -295,21 +181,39 @@ function Move-PanelDivider {
     $originalPos = New-Object WinAPI+POINT
     [WinAPI]::GetCursorPos([ref]$originalPos) | Out-Null
 
-    # Y position: middle of window, but skip title bar (~35px) and status bar (~25px)
-    $clickY = [int]($WindowY + 35 + (($WindowHeight - 60) / 2))
+    # Y position: Just below the title bar and tabs (~80px from top)
+    $clickY = [int]($WindowY + 80)
 
-    # The divider is 300px from right edge of window
-    $dividerX = $WindowX + $WindowWidth - 300
+    # Start position: Very close to right edge (100px from right)
+    # This ensures we grab sash3 (auxiliary bar divider), not sash2 (editor group)
+    $startX = $WindowX + $WindowWidth - 100
 
-    Write-Host "    Dragging from X=$dividerX to X=$TargetX, Y=$clickY" -ForegroundColor Gray
+    Write-Host "    Drag: from X=$startX to X=$TargetX at Y=$clickY" -ForegroundColor Gray
 
-    # Single drag from divider position to target using C# method
-    [WinAPI]::MouseDrag($dividerX, $clickY, $TargetX, $clickY)
+    # Move cursor to start position
+    [WinAPI]::SetCursorPos($startX, $clickY) | Out-Null
+    Start-Sleep -Milliseconds 100
+
+    # Mouse down
+    [WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 50
+
+    # Drag to target (incremental movement for smooth drag)
+    $steps = 20
+    $deltaX = ($TargetX - $startX) / $steps
+    for ($i = 1; $i -le $steps; $i++) {
+        $currentX = [int]($startX + ($deltaX * $i))
+        [WinAPI]::SetCursorPos($currentX, $clickY) | Out-Null
+        Start-Sleep -Milliseconds 10
+    }
+
+    # Mouse up
+    [WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTUP, 0, 0, 0, [IntPtr]::Zero)
 
     # Restore cursor
     [WinAPI]::SetCursorPos($originalPos.x, $originalPos.y) | Out-Null
 
-    Write-Host "  Panel divider drag complete" -ForegroundColor Green
+    Write-Host "  Panel divider moved" -ForegroundColor Green
 }
 
 function Duplicate-VSCodeWindow {
@@ -386,11 +290,12 @@ function Invoke-LayoutSnap {
         # Small delay for window to render
         Start-Sleep -Milliseconds 100
 
-        # Ensure VS Code has focus (skip Ctrl+Alt+B since panel is usually already open)
+
+        
+        # Open the Claude Code panel
         Open-SecondaryPanel -hwnd $hwnd -SkipToggle
 
-        # Now drag the panel divider to the target position
-        Move-PanelDivider -TargetX $DividerTargetX -WindowX $TargetX -WindowY $TargetY -WindowWidth $TargetWidth -WindowHeight $TargetHeight
+        Write-Host "  Layout complete - manually adjust panel divider once (VS Code remembers it)" -ForegroundColor Yellow
 
         return $true
     } else {
