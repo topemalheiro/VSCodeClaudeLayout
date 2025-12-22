@@ -185,8 +185,8 @@ function Move-PanelDivider {
     $clickY = [int]($WindowY + ($WindowHeight / 2))
 
     # The auxiliary bar sash is at the LEFT edge of the auxiliary bar
-    # Try grabbing from ~500px from right edge (typical aux bar width)
-    $startX = $WindowX + $WindowWidth - 500
+    # Aux bar is typically 300-400px wide, so sash is at ~3500px (3840 - 340)
+    $startX = $WindowX + $WindowWidth - 340
 
     Write-Host "    Drag: from X=$startX to X=$TargetX at Y=$clickY" -ForegroundColor Gray
 
@@ -301,10 +301,15 @@ function Invoke-LayoutSnap {
         # Open the Claude Code panel
         Open-SecondaryPanel -hwnd $hwnd -SkipToggle
 
-        # Resize auxiliary bar by dragging the sash
-        Write-Host "  Resizing auxiliary bar..." -ForegroundColor Cyan
-        Move-PanelDivider -TargetX $DividerTargetX -WindowX $TargetX -WindowY $TargetY -WindowWidth $TargetWidth -WindowHeight $TargetHeight
-        Write-Host "  Panel resized" -ForegroundColor Green
+        # Resize auxiliary bar by setting editor width via CSS
+        # Use Custom UI Style extension with Developer: Reload Window
+        Write-Host "  Applying panel CSS..." -ForegroundColor Cyan
+        [System.Windows.Forms.SendKeys]::SendWait("^+p")
+        Start-Sleep -Milliseconds 300
+        [System.Windows.Forms.SendKeys]::SendWait("Developer: Reload Window")
+        Start-Sleep -Milliseconds 200
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        Write-Host "  Window reloading with CSS..." -ForegroundColor Green
 
         return $true
     } else {
