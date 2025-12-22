@@ -181,33 +181,34 @@ function Move-PanelDivider {
     $originalPos = New-Object WinAPI+POINT
     [WinAPI]::GetCursorPos([ref]$originalPos) | Out-Null
 
-    # Y position: Just below the title bar and tabs (~80px from top)
-    $clickY = [int]($WindowY + 80)
+    # Y position: Middle of window (avoids tabs and status bar)
+    $clickY = [int]($WindowY + ($WindowHeight / 2))
 
-    # Start position: Very close to right edge (100px from right)
-    # This ensures we grab sash3 (auxiliary bar divider), not sash2 (editor group)
-    $startX = $WindowX + $WindowWidth - 100
+    # The auxiliary bar sash is at the LEFT edge of the auxiliary bar
+    # Try grabbing from ~500px from right edge (typical aux bar width)
+    $startX = $WindowX + $WindowWidth - 500
 
     Write-Host "    Drag: from X=$startX to X=$TargetX at Y=$clickY" -ForegroundColor Gray
 
     # Move cursor to start position
     [WinAPI]::SetCursorPos($startX, $clickY) | Out-Null
-    Start-Sleep -Milliseconds 100
+    Start-Sleep -Milliseconds 200
 
     # Mouse down
     [WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
-    Start-Sleep -Milliseconds 50
+    Start-Sleep -Milliseconds 100
 
     # Drag to target (incremental movement for smooth drag)
-    $steps = 20
+    $steps = 30
     $deltaX = ($TargetX - $startX) / $steps
     for ($i = 1; $i -le $steps; $i++) {
         $currentX = [int]($startX + ($deltaX * $i))
         [WinAPI]::SetCursorPos($currentX, $clickY) | Out-Null
-        Start-Sleep -Milliseconds 10
+        Start-Sleep -Milliseconds 15
     }
 
     # Mouse up
+    Start-Sleep -Milliseconds 50
     [WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTUP, 0, 0, 0, [IntPtr]::Zero)
 
     # Restore cursor
@@ -282,6 +283,7 @@ function Invoke-LayoutSnap {
     # Move and resize
     $result = [WinAPI]::MoveWindow($hwnd, $TargetX, $TargetY, $TargetWidth, $TargetHeight, $true)
 
+    Write-Host "  Failed to reposition window!" -ForegroundColor Red
     if ($result) {
         Write-Host "  Repositioned to: X=$TargetX, Y=$TargetY, ${TargetWidth}x${TargetHeight}" -ForegroundColor Green
         # Bring to front
@@ -299,19 +301,13 @@ function Invoke-LayoutSnap {
         # Open the Claude Code panel
         Open-SecondaryPanel -hwnd $hwnd -SkipToggle
 
-        # Reload VS Code window to apply Custom UI Style CSS
-        # (Sets auxiliary bar to 1920px width)
-        Write-Host "  Reloading window to apply CSS..." -ForegroundColor Cyan
-        [System.Windows.Forms.SendKeys]::SendWait("^+p")
-        Start-Sleep -Milliseconds 400
-        [System.Windows.Forms.SendKeys]::SendWait("Developer: Reload Window")
-        Start-Sleep -Milliseconds 300
-        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-        Write-Host "  Window reload triggered" -ForegroundColor Green
+        # Resize auxiliary bar by dragging the sash
+        Write-Host "  Resizing auxiliary bar..." -ForegroundColor Cyan
+        Move-PanelDivider -TargetX $DividerTargetX -WindowX $TargetX -WindowY $TargetY -WindowWidth $TargetWidth -WindowHeight $TargetHeight
+        Write-Host "  Panel resized" -ForegroundColor Green
 
         return $true
     } else {
-        Write-Host "  Failed to reposition window!" -ForegroundColor Red
         return $false
     }
 }
