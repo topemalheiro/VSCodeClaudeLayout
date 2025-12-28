@@ -210,11 +210,19 @@ $TargetHeight = 953
 # Panel divider target position (X coordinate where monitors split)
 $DividerTargetX = 1920
 
-# Hotkey settings: Ctrl+Alt+V
+# Single-monitor layout (Ctrl+Alt+N) - auxiliary panel fills screen 1
+$SingleMonitorX = 0
+$SingleMonitorY = 1083
+$SingleMonitorWidth = 1920
+$SingleMonitorHeight = 953
+
+# Hotkey settings
 $MOD_CONTROL = 0x0002
 $MOD_ALT = 0x0001
 $VK_V = 0x56
+$VK_N = 0x4E
 $HOTKEY_ID = 9999
+$HOTKEY_ID_N = 10000
 
 function Find-VSCodeWindow {
     # First check if foreground window is VS Code
@@ -399,6 +407,58 @@ function Invoke-LayoutSnap {
     }
 }
 
+function Invoke-SingleMonitorLayout {
+    Write-Host "`n[$(Get-Date -Format 'HH:mm:ss')] Snapping VS Code to single monitor (auxiliary panel full)..."
+
+    $hwnd = Find-VSCodeWindow
+
+    if ($null -eq $hwnd -or $hwnd -eq [IntPtr]::Zero) {
+        Write-Host "  No VS Code window found!" -ForegroundColor Yellow
+        return $false
+    }
+
+    # Get window title for feedback
+    $titleLength = [WinAPI]::GetWindowTextLength($hwnd)
+    $sb = New-Object System.Text.StringBuilder($titleLength + 1)
+    [WinAPI]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null
+    Write-Host "  Found: $($sb.ToString())" -ForegroundColor Cyan
+
+    # Restore if minimized (SW_RESTORE = 9)
+    [WinAPI]::ShowWindow($hwnd, 9) | Out-Null
+
+    # Move and resize to single monitor
+    $result = [WinAPI]::MoveWindow($hwnd, $SingleMonitorX, $SingleMonitorY, $SingleMonitorWidth, $SingleMonitorHeight, $true)
+
+    if ($result) {
+        Write-Host "  Repositioned to: X=$SingleMonitorX, Y=$SingleMonitorY, ${SingleMonitorWidth}x${SingleMonitorHeight}" -ForegroundColor Green
+        # Bring to front
+        [WinAPI]::SetForegroundWindow($hwnd) | Out-Null
+
+        # Small delay for window to render
+        Start-Sleep -Milliseconds 100
+
+        # Click to ensure focus
+        $clickX = [int]($SingleMonitorX + ($SingleMonitorWidth / 2))
+        $clickY = [int]($SingleMonitorY + ($SingleMonitorHeight / 2))
+        [WinAPI]::MouseClick($clickX, $clickY)
+        Start-Sleep -Milliseconds 50
+
+        # Drag panel divider to maximize auxiliary panel (panel is on right side)
+        # Start from right side of window, drag left to minimize editor
+        $dragY = [int]($SingleMonitorY + 35 + (($SingleMonitorHeight - 60) / 2))
+        $startX = $SingleMonitorX + $SingleMonitorWidth - 100  # Right side, inside panel
+        $endX = $SingleMonitorX + 100  # Left edge, minimal editor width
+
+        Write-Host "  Maximizing auxiliary panel (drag from X=$startX to X=$endX)..." -ForegroundColor Cyan
+        [WinAPI]::MouseDrag($startX, $dragY, $endX, $dragY)
+
+        return $true
+    } else {
+        Write-Host "  Failed to reposition window!" -ForegroundColor Red
+        return $false
+    }
+}
+
 # If -Once flag, just snap and exit
 if ($Once) {
     if ($Duplicate) {
@@ -413,17 +473,18 @@ if ($Once) {
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  VS Code Claude Layout Script" -ForegroundColor White
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  Hotkey: Ctrl+Alt+V" -ForegroundColor Yellow
-Write-Host "  Target: Spans both bottom monitors"
-Write-Host "          (${TargetWidth}x${TargetHeight} at $TargetX,$TargetY)"
-Write-Host "  Divider: X=$DividerTargetX (center)"
+Write-Host "  Ctrl+Alt+V - Dual monitor layout" -ForegroundColor Yellow
+Write-Host "  Ctrl+Alt+N - Single monitor (panel full)" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Press Ctrl+Alt+V to snap VS Code"
+Write-Host "  Dual:   ${TargetWidth}x${TargetHeight} at $TargetX,$TargetY"
+Write-Host "  Single: ${SingleMonitorWidth}x${SingleMonitorHeight} at $SingleMonitorX,$SingleMonitorY"
+Write-Host ""
 Write-Host "  Press Ctrl+C to exit"
 Write-Host "============================================" -ForegroundColor Cyan
 
-# Register hotkey (use thread ID 0 for global)
+# Register hotkeys
 $registered = [WinAPI]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_ID, ($MOD_CONTROL -bor $MOD_ALT), $VK_V)
+$registeredN = [WinAPI]::RegisterHotKey([IntPtr]::Zero, $HOTKEY_ID_N, ($MOD_CONTROL -bor $MOD_ALT), $VK_N)
 
 if (-not $registered) {
     Write-Host ""
@@ -432,8 +493,16 @@ if (-not $registered) {
     exit 1
 }
 
+if (-not $registeredN) {
+    Write-Host ""
+    Write-Host "ERROR: Failed to register Ctrl+Alt+N hotkey!" -ForegroundColor Red
+    Write-Host "The hotkey may be in use by another application." -ForegroundColor Red
+    [WinAPI]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_ID) | Out-Null
+    exit 1
+}
+
 Write-Host ""
-Write-Host "Hotkey registered. Listening..." -ForegroundColor Green
+Write-Host "Hotkeys registered. Listening..." -ForegroundColor Green
 
 # Message loop
 $msg = New-Object WinAPI+MSG
@@ -446,8 +515,12 @@ try {
             break
         }
 
-        if ($msg.message -eq [WinAPI]::WM_HOTKEY -and $msg.wParam -eq $HOTKEY_ID) {
-            Invoke-LayoutSnap
+        if ($msg.message -eq [WinAPI]::WM_HOTKEY) {
+            if ($msg.wParam -eq $HOTKEY_ID) {
+                Invoke-LayoutSnap
+            } elseif ($msg.wParam -eq $HOTKEY_ID_N) {
+                Invoke-SingleMonitorLayout
+            }
         }
 
         [WinAPI]::TranslateMessage([ref]$msg) | Out-Null
@@ -455,5 +528,6 @@ try {
     }
 } finally {
     [WinAPI]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_ID) | Out-Null
-    Write-Host "`nHotkey unregistered. Goodbye!" -ForegroundColor Cyan
+    [WinAPI]::UnregisterHotKey([IntPtr]::Zero, $HOTKEY_ID_N) | Out-Null
+    Write-Host "`nHotkeys unregistered. Goodbye!" -ForegroundColor Cyan
 }
