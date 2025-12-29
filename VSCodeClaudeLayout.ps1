@@ -319,7 +319,7 @@ function Move-PanelDivider {
 
     # Restore cursor
     [WinAPI]::SetCursorPos($originalPos.x, $originalPos.y) | Out-Null
-Works perfectly
+
     Write-Host "  Panel divider drag complete" -ForegroundColor Green
 }
 
