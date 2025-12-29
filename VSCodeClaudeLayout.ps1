@@ -3,8 +3,9 @@
 # Snaps VS Code window to span both bottom monitors with Claude Code panel on right
 
 param(
-    [switch]$Once,      # Run once without hotkey listener (for testing)
-    [switch]$Duplicate  # Duplicate window first, then snap
+    [switch]$Once,       # Run Ctrl+Alt+V layout once (dual monitors bottom)
+    [switch]$SingleOnce, # Run Ctrl+Alt+N layout once (top monitors)
+    [switch]$Duplicate   # Duplicate window first, then snap
 )
 
 Add-Type @"
@@ -210,11 +211,13 @@ $TargetHeight = 953
 # Panel divider target position (X coordinate where monitors split)
 $DividerTargetX = 1920
 
-# Single-monitor layout (Ctrl+Alt+N) - auxiliary panel fills screen 1
-$SingleMonitorX = 0
-$SingleMonitorY = 1083
-$SingleMonitorWidth = 1920
-$SingleMonitorHeight = 953
+# Top monitors layout (Ctrl+Alt+N) - spans DISPLAY2 + DISPLAY1 (top-left to top-middle)
+# DISPLAY2: X=-1360, Y=449, 1360x768
+# DISPLAY1: X=0, Y=0, 1920x1080 (primary, taskbar at top 40px)
+$SingleMonitorX = -1360       # Left edge of DISPLAY2
+$SingleMonitorY = 449         # Top of DISPLAY2
+$SingleMonitorWidth = 3280    # 1360 + 1920 (both monitors)
+$SingleMonitorHeight = 583    # From Y=449 to Y=1032 (DISPLAY1 working area bottom)
 
 # Hotkey settings
 $MOD_CONTROL = 0x0002
@@ -316,7 +319,7 @@ function Move-PanelDivider {
 
     # Restore cursor
     [WinAPI]::SetCursorPos($originalPos.x, $originalPos.y) | Out-Null
-
+Works perfectly
     Write-Host "  Panel divider drag complete" -ForegroundColor Green
 }
 
@@ -459,7 +462,7 @@ function Invoke-SingleMonitorLayout {
     }
 }
 
-# If -Once flag, just snap and exit
+# If -Once flag, run dual layout and exit
 if ($Once) {
     if ($Duplicate) {
         Invoke-LayoutSnap -DuplicateFirst
@@ -469,12 +472,18 @@ if ($Once) {
     exit 0
 }
 
+# If -SingleOnce flag, run single/top layout and exit
+if ($SingleOnce) {
+    Invoke-SingleMonitorLayout
+    exit 0
+}
+
 # Main execution with hotkey listener
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  VS Code Claude Layout Script" -ForegroundColor White
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  Ctrl+Alt+V - Dual monitor layout" -ForegroundColor Yellow
-Write-Host "  Ctrl+Alt+N - Single monitor (panel full)" -ForegroundColor Yellow
+Write-Host "  Ctrl+Alt+V - Dual monitor layout (bottom)" -ForegroundColor Yellow
+Write-Host "  Ctrl+Alt+N - Top monitors layout (panel full)" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  Dual:   ${TargetWidth}x${TargetHeight} at $TargetX,$TargetY"
 Write-Host "  Single: ${SingleMonitorWidth}x${SingleMonitorHeight} at $SingleMonitorX,$SingleMonitorY"
