@@ -411,8 +411,14 @@ function Invoke-LayoutSnap {
 }
 
 function Invoke-SingleMonitorLayout {
-    Write-Host "`n[$(Get-Date -Format 'HH:mm:ss')] Snapping VS Code to single monitor (auxiliary panel full)..."
+    Write-Host "`n[$(Get-Date -Format 'HH:mm:ss')] Snapping VS Code to top monitors (auxiliary panel full)..."
 
+    # First run dual layout to set up panel correctly
+    Write-Host "  Running dual layout first to set up panel..." -ForegroundColor Cyan
+    Invoke-LayoutSnap | Out-Null
+    Start-Sleep -Milliseconds 200
+
+    # Now find the window again and apply single monitor layout
     $hwnd = Find-VSCodeWindow
 
     if ($null -eq $hwnd -or $hwnd -eq [IntPtr]::Zero) {
