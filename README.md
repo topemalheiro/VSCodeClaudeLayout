@@ -1,6 +1,11 @@
 # VS Code Claude Layout
 
-PowerShell script to snap VS Code window across dual monitors with Claude Code panel on the right.
+This script is Windows only.
+
+PowerShell script to snap VS Code window across dual monitors and Claude Code panel snapped to a position *only* when duplicating a window.
+ You must change the screens' coordinates to your liking, as in: "with Claude Code panel snapped on the right(...)"; This only works when you Command Palette Trigger 'Ctrl+Shift+P' Workspaces: Duplicate As Workspace in New Window — there still needs to be an update to detect when it's a new window that is not snapped.
+
+If the coordinates for the duplicated window aren't the same on your screen/instance, you'll have to update them. 
 
 ## Features
 
@@ -8,6 +13,7 @@ PowerShell script to snap VS Code window across dual monitors with Claude Code p
 - **Window positioning**: Spans two bottom monitors (3840x953 at 0,1083)
 - **Panel divider**: Drags Claude Code panel divider to center (X=1920)
 - **Duplicate option**: Can duplicate workspace before snapping
+- **There's also 'Ctrl+Alt+N' for another setup across another 2 dual screens.
 
 ## Usage
 
