@@ -1,4 +1,4 @@
-# VS Code Claude Layout
+# VS Code Claude Layout — snap VS Code windows and Claude Code for VS Code panel when on a duplicated window.
 
 This script is Windows only.
 
