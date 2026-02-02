@@ -4,3 +4,6 @@ Desktop.ini
 
 # Shortcuts (generated)
 *.lnk
+
+# Claude local settings
+.claude/
